@@ -5,6 +5,20 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Helper function to get current time in GMT+8 format as YYYY-MM-DD HH:MM:SS
+function getGMT8DateTimeString() {
+  const now = new Date();
+  const gmt8Offset = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+  const gmt8Time = new Date(now.getTime() + gmt8Offset);
+  const year = gmt8Time.getFullYear();
+  const month = String(gmt8Time.getMonth() + 1).padStart(2, '0');
+  const day = String(gmt8Time.getDate()).padStart(2, '0');
+  const hour = String(gmt8Time.getHours()).padStart(2, '0');
+  const minute = String(gmt8Time.getMinutes()).padStart(2, '0');
+  const second = String(gmt8Time.getSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+}
+
 // Middleware
 app.use(express.json());
 app.use(express.static('public'));
@@ -21,8 +35,8 @@ const db = new sqlite3.Database('./todo.db', (err) => {
       title TEXT NOT NULL,
       description TEXT,
       status TEXT DEFAULT 'todo',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME,
+      updated_at DATETIME
     )`);
   }
 });
@@ -44,15 +58,16 @@ app.post('/api/tasks', (req, res) => {
     return res.status(400).json({ error: 'Title is required' });
   }
 
+  const now = getGMT8DateTimeString();
   db.run(
-    'INSERT INTO tasks (title, description) VALUES (?, ?)',
-    [title, description || ''],
+    'INSERT INTO tasks (title, description, created_at, updated_at) VALUES (?, ?, ?, ?)',
+    [title, description || '', now, now],
     function(err) {
       if (err) {
         res.status(500).json({ error: err.message });
         return;
       }
-      res.status(201).json({ id: this.lastID, title, description, status: 'todo' });
+      res.status(201).json({ id: this.lastID, title, description, status: 'todo', created_at: now, updated_at: now });
     }
   );
 });
@@ -77,9 +92,10 @@ app.put('/api/tasks/:id', (req, res) => {
     const updateDescription = description !== undefined ? description : task.description;
     const updateStatus = status !== undefined ? status : task.status;
 
+    const now = getGMT8DateTimeString();
     db.run(
-      'UPDATE tasks SET title = ?, description = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [updateTitle, updateDescription, updateStatus, id],
+      'UPDATE tasks SET title = ?, description = ?, status = ?, updated_at = ? WHERE id = ?',
+      [updateTitle, updateDescription, updateStatus, now, id],
       function(err) {
         if (err) {
           res.status(500).json({ error: err.message });
