@@ -10,8 +10,18 @@
 <body class="bg-gray-50 min-h-screen">
     <div class="container mx-auto px-4 py-8">
         <header class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-gray-800">Todo Kanban Board</h1>
-            <p class="text-gray-600 mt-2">Drag and drop tasks between columns</p>
+            <h1 class="text-3xl font-bold text-gray-800">Silver Yu Tasks Base</h1>
+            <p id="daily-quote" class="text-gray-600 mt-2"></p>
+            <div class="flex justify-center space-x-4 mt-4">
+                <button id="export-btn" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors">
+                    Export Tasks
+                </button>
+                <button id="import-btn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
+                    Import Tasks
+                </button>
+                <input type="file" id="import-file" accept=".json" style="display: none;">
+            </div>
+            <p class="text-gray-500 text-sm mt-2">Version 1.0.2</p>
         </header>
 
         <!-- Add Task Form -->
@@ -301,6 +311,120 @@
 
         // Initial load
         loadTasks();
+        showDailyQuote();
+
+        // Export functionality
+        document.getElementById('export-btn').addEventListener('click', exportTasks);
+
+        // Import functionality
+        document.getElementById('import-btn').addEventListener('click', function() {
+            document.getElementById('import-file').click();
+        });
+
+        document.getElementById('import-file').addEventListener('change', handleFileSelect);
+
+        function exportTasks() {
+            fetch('/api/tasks')
+                .then(response => response.json())
+                .then(tasks => {
+                    const data = JSON.stringify(tasks, null, 2);
+                    const blob = new Blob([data], {type: 'application/json'});
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `silver-yu-tasks-${new Date().toISOString().split('T')[0]}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                })
+                .catch(error => {
+                    console.error('Error exporting tasks:', error);
+                    alert('Failed to export tasks');
+                });
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const tasks = JSON.parse(e.target.result);
+                    // Validate that it's an array of tasks
+                    if (!Array.isArray(tasks)) {
+                        throw new Error('Invalid file format');
+                    }
+
+                    // Clear existing tasks and import new ones
+                    if (confirm('This will replace all existing tasks. Continue?')) {
+                        // Delete all existing tasks first
+                        fetch('/api/tasks')
+                            .then(response => response.json())
+                            .then(existingTasks => {
+                                const deletePromises = existingTasks.map(task =>
+                                    fetch(`/api/tasks/${task.id}`, {method: 'DELETE'})
+                                );
+                                return Promise.all(deletePromises);
+                            })
+                            .then(() => {
+                                // Import new tasks
+                                const importPromises = tasks.map(task =>
+                                    fetch('/api/tasks', {
+                                        method: 'POST',
+                                        headers: {'Content-Type': 'application/json'},
+                                        body: JSON.stringify({
+                                            title: task.title,
+                                            description: task.description || '',
+                                            status: task.status || 'todo'
+                                        })
+                                    })
+                                );
+                                return Promise.all(importPromises);
+                            })
+                            .then(() => {
+                                loadTasks();
+                                alert('Tasks imported successfully!');
+                            })
+                            .catch(error => {
+                                console.error('Error importing tasks:', error);
+                                alert('Failed to import tasks');
+                            });
+                    }
+                } catch (error) {
+                    console.error('Error parsing JSON:', error);
+                    alert('Invalid JSON file');
+                }
+            };
+            reader.readAsText(file);
+            // Reset file input
+            event.target.value = '';
+        }
+
+        function showDailyQuote() {
+            const quotes = [
+                "The only way to do great work is to love what you do. - Steve Jobs",
+                "Innovation distinguishes between a leader and a follower. - Steve Jobs",
+                "Life is what happens when you're busy making other plans. - John Lennon",
+                "The future belongs to those who believe in the beauty of their dreams. - Eleanor Roosevelt",
+                "It is during our darkest moments that we must focus to see the light. - Aristotle",
+                "Whoever is happy will make others happy too. - Anne Frank",
+                "Do not go where the path may lead, go instead where there is no path and leave a trail. - Ralph Waldo Emerson",
+                "The journey of a thousand miles begins with one step. - Lao Tzu",
+                "What you get by achieving your goals is not as important as what you become by achieving your goals. - Zig Ziglar",
+                "Believe you can and you're halfway there. - Theodore Roosevelt"
+            ];
+
+            // Use date to get consistent quote for the day (GMT+8)
+            const now = new Date();
+            const gmt8Offset = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
+            const gmt8Time = now.getTime() + gmt8Offset;
+            const today = new Date(gmt8Time);
+            const dayIndex = Math.floor(today / (24 * 60 * 60 * 1000)) % quotes.length;
+
+            document.getElementById('daily-quote').textContent = quotes[dayIndex];
+        }
     </script>
 </body>
 </html>
