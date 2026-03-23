@@ -21,7 +21,7 @@
                 </button>
                 <input type="file" id="import-file" accept=".json" style="display: none;">
             </div>
-            <p class="text-gray-500 text-sm mt-2">Version 1.0.2</p>
+            <p class="text-gray-500 text-sm mt-2">Version 1.0.4</p>
         </header>
 
         <!-- Add Task Form -->
@@ -248,34 +248,64 @@
 
         // Edit task
         function editTask(id) {
-            // Prompt for new title and description
-            const newTitle = prompt('Enter new title:');
-            if (newTitle === null) {
-                // User canceled
-                return;
-            }
-            const newDescription = prompt('Enter new description:');
-            if (newDescription === null) {
-                // User canceled
-                return;
-            }
+            // First fetch all tasks to find the one we want to edit
+            // (Since there's no single task endpoint, we get all and filter)
+            fetch('/api/tasks')
+                .then(response => response.json())
+                .then(tasks => {
+                    const task = tasks.find(t => t.id === id);
+                    if (!task) {
+                        alert('Task not found');
+                        return;
+                    }
 
-            // Update the task via PUT
-            fetch(`/api/tasks/${id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ title: newTitle, description: newDescription })
-            })
-            .then(response => response.json())
-            .then(() => {
-                loadTasks();
-            })
-            .catch(error => {
-                console.error('Error editing task:', error);
-                alert('Failed to edit task');
-            });
+                    // Prompt for new title and description with current values as defaults
+                    const newTitle = prompt('Edit task title:', task.title);
+                    if (newTitle === null) {
+                        // User canceled
+                        return;
+                    }
+                    const newDescription = prompt('Edit task description:', task.description || '');
+                    if (newDescription === null) {
+                        // User canceled
+                        return;
+                    }
+
+                    // Only send fields that were actually changed
+                    const updateData = {};
+                    if (newTitle !== task.title) {
+                        updateData.title = newTitle;
+                    }
+                    if (newDescription !== (task.description || '')) {
+                        updateData.description = newDescription;
+                    }
+
+                    // If no changes were made, do nothing
+                    if (Object.keys(updateData).length === 0) {
+                        return;
+                    }
+
+                    // Update the task via PUT
+                    fetch(`/api/tasks/${id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(updateData)
+                    })
+                    .then(response => response.json())
+                    .then(() => {
+                        loadTasks();
+                    })
+                    .catch(error => {
+                        console.error('Error editing task:', error);
+                        alert('Failed to edit task');
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching tasks:', error);
+                    alert('Failed to load tasks for editing');
+                });
         }
 
         // Handle form submission
