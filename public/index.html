@@ -30,7 +30,7 @@
                 </button>
                 <input type="file" id="import-file" accept=".json" style="display: none;">
             </div>
-            <p class="text-gray-500 text-sm mt-2">Version 1.0.5</p>
+            <p class="text-gray-500 text-sm mt-2">Version 1.0.6</p>
         </header>
 
         <!-- Add Task Form -->
@@ -238,6 +238,14 @@
 
             div.addEventListener('dragstart', dragStart);
             div.addEventListener('dragend', dragEnd);
+
+            // Add click event to show task details when clicking on task area
+            div.addEventListener('click', function(event) {
+                // Prevent triggering when clicking on buttons inside the task
+                if (!event.target.closest('button')) {
+                    viewTaskDetails(task.id);
+                }
+            });
 
             return div;
         }
