@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Database & Backups
+todo.db
+backups/
+
+# Logs
+server.log
+*.log
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
