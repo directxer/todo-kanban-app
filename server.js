@@ -1,6 +1,8 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const fs = require('fs');
+const cron = require('node-cron');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,6 +21,22 @@ function getGMT8DateTimeString() {
   return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 }
 
+// Logging function to output to console and server.log
+const logFilePath = path.join(__dirname, 'server.log');
+function log(message) {
+  console.log(message);
+  try {
+    fs.appendFileSync(logFilePath, message + '\n');
+  } catch (err) {
+    console.error('Failed to write to server.log:', err);
+  }
+}
+
+// Function to format date for backup filenames (GMT+8) - reuses getGMT8DateTimeString
+function getGMT8DateTimeForFilename() {
+  return getGMT8DateTimeString().replace(/[: ]/g, '-');
+}
+
 // Middleware
 app.use(express.json());
 app.use(express.static('public'));
@@ -26,9 +44,9 @@ app.use(express.static('public'));
 // Database setup
 const db = new sqlite3.Database('./todo.db', (err) => {
   if (err) {
-    console.error('Error opening database:', err.message);
+    log('Error opening database:', err.message);
   } else {
-    console.log('Connected to SQLite database.');
+    log('Connected to SQLite database.');
     // Create tables if they don't exist
     db.run(`CREATE TABLE IF NOT EXISTS tasks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,6 +57,71 @@ const db = new sqlite3.Database('./todo.db', (err) => {
       updated_at DATETIME
     )`);
   }
+});
+
+// Backup functionality
+const BACKUP_DIR = path.join(__dirname, 'backups');
+
+// Ensure backups directory exists
+if (!fs.existsSync(BACKUP_DIR)) {
+  fs.mkdirSync(BACKUP_DIR);
+  log('Created backups directory:', BACKUP_DIR);
+}
+
+// Function to delete backup files older than 30 days
+function cleanupOldBackups() {
+  const cutoffTime = Date.now() - (30 * 24 * 60 * 60 * 1000); // 30 days ago
+
+  fs.readdirSync(BACKUP_DIR).forEach(file => {
+    const filePath = path.join(BACKUP_DIR, file);
+    const stats = fs.statSync(filePath);
+
+    if (stats.isFile() && stats.mtime.getTime() < cutoffTime) {
+      fs.unlinkSync(filePath);
+      log(`Deleted old backup file: ${file}`);
+    }
+  });
+}
+
+// Function to perform database backup
+function backupDatabase() {
+  try {
+    const timestamp = getGMT8DateTimeForFilename();
+    const dbBackupPath = path.join(BACKUP_DIR, `todo-${timestamp}.db`);
+    const jsonBackupPath = path.join(BACKUP_DIR, `todo-${timestamp}.json`);
+
+    // Backup database file
+    const data = fs.readFileSync('./todo.db');
+    fs.writeFileSync(dbBackupPath, data);
+
+    // Export all tasks to JSON
+    db.all('SELECT * FROM tasks ORDER BY created_at DESC', [], (err, rows) => {
+      if (err) {
+        log('Error exporting tasks to JSON:', err.message);
+        return;
+      }
+
+      const jsonData = JSON.stringify(rows, null, 2);
+      fs.writeFileSync(jsonBackupPath, jsonData, 'utf8');
+
+      log(`Database backup completed: ${dbBackupPath} and ${jsonBackupPath}`);
+
+      // Cleanup old backups after successful backup
+      cleanupOldBackups();
+    });
+  } catch (error) {
+    log('Backup failed:', error.message);
+  }
+}
+
+// Run immediate backup on server startup
+log('Running immediate database backup on server startup...');
+backupDatabase();
+
+// Set up cron job to run backup every day at 03:00 server local time
+cron.schedule('0 3 * * *', () => {
+  log('Running scheduled database backup...');
+  backupDatabase();
 });
 
 // API Routes
