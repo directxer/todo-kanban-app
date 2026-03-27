@@ -91,7 +91,8 @@ function backupDatabase() {
     const jsonBackupPath = path.join(BACKUP_DIR, `todo-${timestamp}.json`);
 
     // Backup database file
-    fs.copyFileSync('./todo.db', dbBackupPath);
+    const data = fs.readFileSync('./todo.db');
+    fs.writeFileSync(dbBackupPath, data);
 
     // Export all tasks to JSON
     db.all('SELECT * FROM tasks ORDER BY created_at DESC', [], (err, rows) => {
